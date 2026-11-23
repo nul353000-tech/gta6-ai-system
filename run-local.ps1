@@ -1,5 +1,18 @@
+param([switch]$Lan)
+
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
+$bindAddress = "127.0.0.1"
+if ($Lan) {
+    $bindAddress = "0.0.0.0"
+    $lanAddress = Get-NetIPConfiguration -ErrorAction SilentlyContinue |
+        Where-Object { $_.IPv4DefaultGateway -and $_.IPv4Address } |
+        ForEach-Object { $_.IPv4Address.IPAddress } |
+        Select-Object -First 1
+    Write-Host "Mode LAN activé. Utilise uniquement un Wi-Fi privé de confiance."
+    if ($lanAddress) { Write-Host "Android : http://$($lanAddress):8000" }
+    Write-Host "Les API de sauvegarde et Gemini restent protégées par APP_ACCESS_TOKEN."
+}
 
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $python)) {
@@ -74,7 +87,8 @@ Write-Host "Installation des dépendances Python..."
 & $python -m pip install -r requirements.txt
 if ($LASTEXITCODE -ne 0) { throw "L'installation Python a échoué." }
 
-Write-Host "API locale : http://127.0.0.1:8000"
-Write-Host "Documentation/test interactif : http://127.0.0.1:8000/docs"
+Write-Host "Tableau de bord : http://127.0.0.1:8000"
+if ($Lan -and $lanAddress) { Write-Host "Tableau de bord Android : http://$($lanAddress):8000" }
+Write-Host "Documentation API : http://127.0.0.1:8000/docs"
 Write-Host "Jeton local enregistré dans .env (fichier ignoré par Git). Ne le publie pas."
-& $python -m uvicorn app:app --host 127.0.0.1 --port 8000
+& $python -m uvicorn app:app --host $bindAddress --port 8000

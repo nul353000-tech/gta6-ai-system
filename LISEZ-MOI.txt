@@ -1,0 +1,53 @@
+GTA 6 AI SYSTEM — ANDROID PRO V1.6
+=================================
+
+CE QUI EST AJOUTÉ
+- Connexion réelle du copilote Android à un backend IA distant.
+- Analyse texte + capture image avec l'API OpenAI Responses.
+- Clé OpenAI conservée exclusivement côté serveur.
+- Jeton d'accès privé, HTTPS recommandé, limite de 12 requêtes/minute/IP,
+  taille image limitée à 5 Mo et validation du type/encodage.
+- Projet Android natif source (Kotlin/WebView) conservé.
+- Les données du jeu restent enregistrées localement sur le téléphone.
+
+DÉPLOIEMENT DU SERVEUR (UNE FOIS)
+1. Crée un compte chez un hébergeur compatible Docker (ex. Render).
+2. Déploie ce dossier via le fichier render.yaml.
+3. Dans les variables secrètes du service, renseigne :
+   OPENAI_API_KEY = ta clé API OpenAI
+   APP_ACCESS_TOKEN = un jeton aléatoire long (32 caractères minimum conseillé)
+   OPENAI_MODEL = gpt-6.1-terra
+4. Ne colle jamais la clé API dans l'application, dans un dépôt public ou dans une conversation.
+5. Attends que /health réponde {"status":"ok",...} en HTTPS.
+
+CONNEXION DANS L'APPLICATION
+1. Ouvre l'application.
+2. Va dans Copilote.
+3. Renseigne l'URL HTTPS du serveur et le même APP_ACCESS_TOKEN.
+4. Appuie sur « Enregistrer la connexion », puis « Tester le serveur ».
+5. Écris une question et envoie-la. Pour analyser une capture, importe-la dans Vision/OCR
+   puis laisse cochée l'option de joindre la capture.
+
+INSTALLATION / APK
+- Version web : ouvrir web/GTA6_AI_SYSTEM_ANDROID.html dans Chrome.
+- APK : ouvrir android/ dans Android Studio, synchroniser Gradle, puis Build > Build APK(s).
+- Alternative sans installer Android Studio : publier le dossier android/ dans un dépôt GitHub,
+  lancer l'action « Build Android APK » (Actions > Build Android APK > Run workflow), puis
+  télécharger l'artefact gta6-ai-system-debug-apk.
+- L'APK n'est pas compilé ici : Android SDK/Gradle n'est pas installé dans cet environnement.
+- L'URL du backend et le jeton se saisissent dans l'application ; aucun secret n'est codé dans l'APK.
+
+LIMITES QUI RESTENT
+- L'application n'intercepte pas le flux de PS Remote Play et n'envoie pas de commandes à la manette PS5.
+- La capture se fait par import de fichier/image dans Android. L'accès à l'écran d'une autre application
+  n'est pas garanti par Android et n'est pas activé silencieusement.
+- Le moteur OCR Tesseract.js est expérimental et nécessite Internet au premier chargement.
+- La mémoire de l'IA distante est limitée à la question envoyée : l'application ne transmet pas
+  automatiquement tout l'historique local.
+- Les réponses de l'IA peuvent être inexactes ; les éléments non confirmés sur GTA 6 sont signalés.
+
+TESTS TECHNIQUES EFFECTUÉS
+- Syntaxe JavaScript vérifiée avec Node.js.
+- Backend Python compilé (py_compile).
+- Contrôle des fichiers de configuration et des fichiers Android.
+- Pas de déploiement cloud, pas de requête OpenAI réelle, pas de compilation APK ni de test sur téléphone.

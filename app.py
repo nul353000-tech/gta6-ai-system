@@ -14,6 +14,9 @@ from pydantic import BaseModel, Field, ConfigDict
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-6.1-terra").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "auto").strip().lower()
 APP_ACCESS_TOKEN = os.getenv("APP_ACCESS_TOKEN", "").strip()
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 WINDOW_SECONDS = 60
@@ -21,7 +24,7 @@ MAX_REQUESTS_PER_WINDOW = 12
 MAX_RATE_LIMIT_CLIENTS = 10_000
 hits = defaultdict(deque)
 
-app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.1.2")
+app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.2.0")
 bearer_scheme = HTTPBearer(auto_error=False, scheme_name="BearerAuth")
 # Android WebView can send requests with an opaque/null origin. No cookies are used;
 # the private bearer token is mandatory on the protected endpoint.
@@ -56,7 +59,7 @@ def _image_mime(data: bytes) -> Optional[str]:
     return None
 
 
-def _parse_image(data_url: str) -> str:
+def _parse_image(data_url: str) -> tuple[str, str, str]:
     if not data_url.startswith("data:image/") or ";base64," not in data_url:
         raise HTTPException(400, "Image invalide : data URL image base64 attendue.")
     header, encoded = data_url.split(",", 1)
@@ -72,7 +75,7 @@ def _parse_image(data_url: str) -> str:
     actual_mime = _image_mime(raw)
     if actual_mime is None or declared_mime != actual_mime:
         raise HTTPException(400, "Le contenu de l'image ne correspond pas à son format déclaré.")
-    return data_url
+    return data_url, declared_mime, encoded
 
 @app.post("/v1/assistant")
 async def assistant(
@@ -88,7 +91,22 @@ async def assistant(
         or not hmac.compare_digest(authorization.credentials, APP_ACCESS_TOKEN)
     ):
         raise HTTPException(401, "Accès refusé.")
-    if not OPENAI_API_KEY:
+    provider = AI_PROVIDER
+    if provider == "auto":
+        if GEMINI_API_KEY:
+            provider = "gemini"
+        elif OPENAI_API_KEY:
+            provider = "openai"
+        else:
+            raise HTTPException(
+                503,
+                "Aucune clé IA configurée. Ajoute GEMINI_API_KEY pour le niveau gratuit Gemini.",
+            )
+    if provider not in {"openai", "gemini"}:
+        raise HTTPException(503, "AI_PROVIDER doit être 'auto', 'openai' ou 'gemini'.")
+    if provider == "gemini" and not GEMINI_API_KEY:
+        raise HTTPException(503, "GEMINI_API_KEY manquante côté serveur.")
+    if provider == "openai" and not OPENAI_API_KEY:
         raise HTTPException(503, "OPENAI_API_KEY manquante côté serveur.")
 
     now = time.time()
@@ -108,53 +126,106 @@ async def assistant(
         raise HTTPException(429, "Trop de requêtes. Réessaie dans une minute.")
     q.append(now)
 
-    content = [{"type": "input_text", "text": payload.prompt}]
+    data_url = image_mime = image_encoded = None
     if payload.image_data_url:
-        data_url = _parse_image(payload.image_data_url)
-        content.append({
-            "type": "input_image",
-            "image_url": data_url,
-            "detail": "auto",
-        })
+        data_url, image_mime, image_encoded = _parse_image(payload.image_data_url)
 
-    body = {
-        "model": OPENAI_MODEL,
-        "store": False,
-        "instructions": (
-            "Tu es le copilote de GTA 6 AI SYSTEM. Réponds en français, de façon concise, "
-            "pratique et structurée. Distingue les faits confirmés, les hypothèses et les "
-            "informations inconnues. N'invente pas les mécaniques, missions, cartes ou "
-            "statistiques de GTA 6. Si une capture est fournie, décris uniquement ce qui est "
-            "visible et signale les incertitudes. Tu ne contrôles pas la PS5 et ne prétends "
-            "jamais exécuter des actions dans le jeu."
-        ),
-        "input": [{"role": "user", "content": content}],
-        "max_output_tokens": 1000,
-    }
+    instructions = (
+        "Tu es le copilote de GTA 6 AI SYSTEM. Réponds en français, de façon concise, "
+        "pratique et structurée. Distingue les faits confirmés, les hypothèses et les "
+        "informations inconnues. N'invente pas les mécaniques, missions, cartes ou "
+        "statistiques de GTA 6. Si une capture est fournie, décris uniquement ce qui est "
+        "visible et signale les incertitudes. Tu ne contrôles pas la PS5 et ne prétends "
+        "jamais exécuter des actions dans le jeu."
+    )
+
+    if provider == "gemini":
+        parts = [{"text": f"{instructions}\n\n{payload.prompt}"}]
+        if image_encoded and image_mime:
+            parts.append({"inline_data": {"mime_type": image_mime, "data": image_encoded}})
+        request_url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+        request_headers = {"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"}
+        request_body = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"maxOutputTokens": 1000},
+        }
+        model = GEMINI_MODEL
+    else:
+        content = [{"type": "input_text", "text": payload.prompt}]
+        if data_url:
+            content.append({
+                "type": "input_image",
+                "image_url": data_url,
+                "detail": "auto",
+            })
+        request_url = "https://api.openai.com/v1/responses"
+        request_headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        request_body = {
+            "model": OPENAI_MODEL,
+            "store": False,
+            "instructions": instructions,
+            "input": [{"role": "user", "content": content}],
+            "max_output_tokens": 1000,
+        }
+        model = OPENAI_MODEL
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
-            resp = await client.post(
-                "https://api.openai.com/v1/responses",
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json=body,
-            )
+            resp = await client.post(request_url, headers=request_headers, json=request_body)
         if resp.status_code >= 400:
             # Do not relay upstream response bodies; they may contain internal details.
+            if resp.status_code == 429:
+                if provider == "gemini":
+                    raise HTTPException(
+                        429,
+                        "Quota gratuit ou limite de débit Gemini atteint. Vérifie les quotas du projet Google AI Studio.",
+                    )
+                try:
+                    error = resp.json().get("error", {})
+                    error = error if isinstance(error, dict) else {}
+                except (ValueError, AttributeError):
+                    error = {}
+                code = error.get("code")
+                error_type = error.get("type")
+                quota_codes = {
+                    "insufficient_quota",
+                    "usage_limit_exceeded",
+                    "organization_usage_limit_exceeded",
+                    "project_spend_limit_exceeded",
+                    "organization_spend_limit_exceeded",
+                }
+                if (isinstance(code, str) and code in quota_codes) or error_type == "insufficient_quota":
+                    raise HTTPException(
+                        429,
+                        "Quota ou plafond de dépenses OpenAI atteint. Vérifie la facturation et les limites du projet.",
+                    )
+
+                detail = "Limite de débit OpenAI atteinte. Réduis la fréquence des requêtes et réessaie."
+                if isinstance(code, str) and len(code) <= 64 and code.replace("_", "").replace("-", "").isalnum():
+                    detail += f" (code : {code})"
+                retry_after = resp.headers.get("Retry-After", "")
+                headers = {"Retry-After": retry_after} if retry_after.isdigit() else None
+                raise HTTPException(429, detail, headers=headers)
             raise HTTPException(502, f"Erreur du fournisseur IA ({resp.status_code}).")
         data = resp.json()
         texts = []
-        for item in data.get("output", []):
-            if item.get("type") == "message":
-                for part in item.get("content", []):
-                    if part.get("type") == "output_text":
-                        texts.append(part.get("text", ""))
+        if provider == "gemini":
+            for candidate in data.get("candidates", []):
+                for part in candidate.get("content", {}).get("parts", []):
+                    if isinstance(part.get("text"), str):
+                        texts.append(part["text"])
+        else:
+            for item in data.get("output", []):
+                if item.get("type") == "message":
+                    for part in item.get("content", []):
+                        if part.get("type") == "output_text":
+                            texts.append(part.get("text", ""))
         answer = "\n".join(texts).strip()
         if not answer:
             raise HTTPException(502, "Le fournisseur IA n'a renvoyé aucun texte.")
-        return {"answer": answer, "model": OPENAI_MODEL}
+        return {"answer": answer, "model": model}
     except httpx.TimeoutException:
         raise HTTPException(504, "Délai dépassé pendant la réponse IA.")
     except HTTPException:

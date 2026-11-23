@@ -13,6 +13,9 @@ def configured(monkeypatch):
     monkeypatch.setattr(api, "APP_ACCESS_TOKEN", "test-secret-token")
     monkeypatch.setattr(api, "OPENAI_API_KEY", "test-openai-key")
     monkeypatch.setattr(api, "OPENAI_MODEL", "gpt-6.1-terra")
+    monkeypatch.setattr(api, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(api, "GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setattr(api, "AI_PROVIDER", "auto")
     api.hits.clear()
 
 
@@ -45,7 +48,8 @@ def test_render_blueprint_builds_from_repository_root():
     assert service["dockerfilePath"] == "./Dockerfile"
     assert service["dockerContext"] == "."
     assert {entry["key"] for entry in service["envVars"]} >= {
-        "OPENAI_API_KEY", "APP_ACCESS_TOKEN", "OPENAI_MODEL"
+        "APP_ACCESS_TOKEN", "OPENAI_MODEL", "GEMINI_API_KEY",
+        "GEMINI_MODEL", "AI_PROVIDER"
     }
 
 
@@ -62,6 +66,18 @@ def test_assistant_rejects_missing_server_configuration(client, monkeypatch):
         json={"prompt": "Bonjour"},
     )
     assert response.status_code == 503
+
+
+def test_auto_provider_reports_missing_key_clearly(client, monkeypatch):
+    monkeypatch.setattr(api, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(api, "GEMINI_API_KEY", "")
+    response = client.post(
+        "/v1/assistant",
+        headers={"Authorization": "Bearer test-secret-token"},
+        json={"prompt": "Bonjour"},
+    )
+    assert response.status_code == 503
+    assert "GEMINI_API_KEY" in response.json()["detail"]
 
 
 def test_assistant_rejects_invalid_image_before_provider_call(client, monkeypatch):
@@ -106,6 +122,42 @@ def test_assistant_sends_responses_request_and_returns_text(client, monkeypatch)
     assert calls["json"]["store"] is False
 
 
+def test_assistant_auto_selects_gemini_for_text_and_image(client, monkeypatch):
+    calls = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"candidates": [{"content": {"parts": [{"text": "Salut depuis Gemini"}]}}]}
+
+    async def fake_post(self, url, **kwargs):
+        calls["url"] = url
+        calls["headers"] = kwargs["headers"]
+        calls["json"] = kwargs["json"]
+        return FakeResponse()
+
+    monkeypatch.setattr(api, "GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(api, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    image_bytes = b"\x89PNG\r\n\x1a\nmock-image"
+    image = base64.b64encode(image_bytes).decode("ascii")
+    response = client.post(
+        "/v1/assistant",
+        headers={"Authorization": "Bearer test-secret-token"},
+        json={"prompt": "Décris l'image", "image_data_url": f"data:image/png;base64,{image}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"answer": "Salut depuis Gemini", "model": "gemini-2.5-flash"}
+    assert calls["url"].endswith("/models/gemini-2.5-flash:generateContent")
+    assert calls["headers"]["x-goog-api-key"] == "test-gemini-key"
+    parts = calls["json"]["contents"][0]["parts"]
+    assert parts[0]["text"].endswith("Décris l'image")
+    assert parts[1]["inline_data"]["mime_type"] == "image/png"
+    assert parts[1]["inline_data"]["data"] == image
+
+
 def test_assistant_maps_provider_failure_to_gateway_error(client, monkeypatch):
     class FakeResponse:
         status_code = 401
@@ -120,6 +172,52 @@ def test_assistant_maps_provider_failure_to_gateway_error(client, monkeypatch):
         json={"prompt": "Bonjour"},
     )
     assert response.status_code == 502
+
+
+def test_assistant_explains_openai_quota_failure(client, monkeypatch):
+    class FakeResponse:
+        status_code = 429
+        headers = {}
+
+        @staticmethod
+        def json():
+            return {"error": {"type": "insufficient_quota", "code": "insufficient_quota"}}
+
+    async def fake_post(self, url, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = client.post(
+        "/v1/assistant",
+        headers={"Authorization": "Bearer test-secret-token"},
+        json={"prompt": "Bonjour"},
+    )
+    assert response.status_code == 429
+    assert "Quota" in response.json()["detail"]
+    assert "facturation" in response.json()["detail"]
+
+
+def test_assistant_exposes_retry_after_for_temporary_rate_limit(client, monkeypatch):
+    class FakeResponse:
+        status_code = 429
+        headers = {"Retry-After": "12"}
+
+        @staticmethod
+        def json():
+            return {"error": {"type": "rate_limit_error", "code": "slow_down"}}
+
+    async def fake_post(self, url, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = client.post(
+        "/v1/assistant",
+        headers={"Authorization": "Bearer test-secret-token"},
+        json={"prompt": "Bonjour"},
+    )
+    assert response.status_code == 429
+    assert "slow_down" in response.json()["detail"]
+    assert response.headers["retry-after"] == "12"
 
 
 def test_assistant_enforces_rate_limit(client, monkeypatch):

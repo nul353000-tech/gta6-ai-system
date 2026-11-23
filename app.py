@@ -6,7 +6,8 @@ from collections import defaultdict, deque
 from typing import Optional
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Security
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -18,7 +19,8 @@ WINDOW_SECONDS = 60
 MAX_REQUESTS_PER_WINDOW = 12
 hits = defaultdict(deque)
 
-app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.1.0")
+app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.1.1")
+authorization_header = APIKeyHeader(name="Authorization", auto_error=False, scheme_name="BearerAuth")
 # Android WebView can send requests with an opaque/null origin. No cookies are used;
 # the private bearer token is mandatory on the protected endpoint.
 app.add_middleware(
@@ -42,7 +44,7 @@ def health():
 async def assistant(
     payload: AssistantRequest,
     request: Request,
-    authorization: Optional[str] = Header(default=None),
+    authorization: Optional[str] = Security(authorization_header),
 ):
     if not APP_ACCESS_TOKEN:
         raise HTTPException(503, "Backend non configuré : APP_ACCESS_TOKEN manquant.")

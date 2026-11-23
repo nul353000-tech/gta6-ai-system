@@ -31,6 +31,13 @@ def test_health_reports_running_version(client):
     }
 
 
+def test_openapi_documents_bearer_authentication(client):
+    schema = client.get("/openapi.json").json()
+    assert schema["components"]["securitySchemes"]["BearerAuth"] == {
+        "type": "http", "scheme": "bearer"
+    }
+
+
 def test_render_blueprint_builds_from_repository_root():
     with open("render.yaml", encoding="utf-8") as blueprint_file:
         blueprint = yaml.safe_load(blueprint_file)

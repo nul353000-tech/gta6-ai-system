@@ -8,7 +8,7 @@ from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Security
-from fastapi.security import APIKeyHeader
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -22,7 +22,7 @@ MAX_RATE_LIMIT_CLIENTS = 10_000
 hits = defaultdict(deque)
 
 app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.1.2")
-authorization_header = APIKeyHeader(name="Authorization", auto_error=False, scheme_name="BearerAuth")
+bearer_scheme = HTTPBearer(auto_error=False, scheme_name="BearerAuth")
 # Android WebView can send requests with an opaque/null origin. No cookies are used;
 # the private bearer token is mandatory on the protected endpoint.
 app.add_middleware(
@@ -78,12 +78,15 @@ def _parse_image(data_url: str) -> str:
 async def assistant(
     payload: AssistantRequest,
     request: Request,
-    authorization: Optional[str] = Security(authorization_header),
+    authorization: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
 ):
     if not APP_ACCESS_TOKEN:
         raise HTTPException(503, "Backend non configuré : APP_ACCESS_TOKEN manquant.")
-    supplied_token = authorization.removeprefix("Bearer ") if authorization else ""
-    if not hmac.compare_digest(supplied_token, APP_ACCESS_TOKEN) or not authorization or not authorization.startswith("Bearer "):
+    if (
+        not authorization
+        or authorization.scheme.lower() != "bearer"
+        or not hmac.compare_digest(authorization.credentials, APP_ACCESS_TOKEN)
+    ):
         raise HTTPException(401, "Accès refusé.")
     if not OPENAI_API_KEY:
         raise HTTPException(503, "OPENAI_API_KEY manquante côté serveur.")

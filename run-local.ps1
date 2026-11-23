@@ -4,9 +4,10 @@ Set-Location -LiteralPath $PSScriptRoot
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $python)) {
     if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
-        throw "Python 3 n'est pas installé ou le lanceur 'py' est absent. Installe Python 3 puis relance ce script."
+        throw "Python 3.12 n'est pas installé ou le lanceur 'py' est absent. Installe Python 3.12 puis relance ce script."
     }
-    py -3 -m venv .venv
+    py -3.12 -m venv .venv
+    if ($LASTEXITCODE -ne 0) { throw "Python 3.12 est requis. Installe-le puis relance ce script." }
 }
 
 if (-not (Test-Path -LiteralPath ".env")) {

@@ -18,6 +18,7 @@ APP_ACCESS_TOKEN = os.getenv("APP_ACCESS_TOKEN", "").strip()
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 WINDOW_SECONDS = 60
 MAX_REQUESTS_PER_WINDOW = 12
+MAX_RATE_LIMIT_CLIENTS = 10_000
 hits = defaultdict(deque)
 
 app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.1.2")
@@ -89,6 +90,14 @@ async def assistant(
 
     now = time.time()
     ip = request.client.host if request.client else "unknown"
+    if ip not in hits and len(hits) >= MAX_RATE_LIMIT_CLIENTS:
+        # Expire idle clients before admitting a new key so attacker-controlled
+        # client addresses cannot grow this process-local cache without bound.
+        for client_ip, events in list(hits.items()):
+            if not events or now - events[-1] > WINDOW_SECONDS:
+                del hits[client_ip]
+        if len(hits) >= MAX_RATE_LIMIT_CLIENTS:
+            hits.pop(next(iter(hits)))
     q = hits[ip]
     while q and now - q[0] > WINDOW_SECONDS:
         q.popleft()

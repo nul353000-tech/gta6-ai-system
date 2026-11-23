@@ -29,6 +29,15 @@ API
   par signature avant leur envoi au fournisseur.
 - Les appels utilisent l'API OpenAI Responses avec store=false. La mémoire conversationnelle
   n'est pas conservée côté serveur.
+- Le limiteur de débit est en mémoire du processus : il convient à une instance unique et
+  doit être remplacé par un stockage partagé si le service Render passe à plusieurs instances.
+
+LIMITES DU SERVICE
+- L'API ne reçoit pas le flux PS Remote Play et n'envoie aucune commande à la PS5.
+- Les requêtes n'incluent que le prompt et l'image fournis ; l'historique local d'un éventuel
+  client n'est pas transmis automatiquement.
+- Les réponses IA peuvent être inexactes. Les instructions demandent de distinguer les faits
+  confirmés des hypothèses et des informations inconnues sur GTA 6.
 
 DEPLOIEMENT RENDER
 Le Blueprint utilise le Dockerfile et le contexte à la racine du dépôt. Connecter

@@ -52,6 +52,17 @@ clé dans Google AI Studio et ajouter `GEMINI_API_KEY` dans Environment dans Ren
 sélectionnera Gemini automatiquement dès qu'il voit cette variable ; sinon il conserve OpenAI.
 Les quotas gratuits sont limités et peuvent changer. Les secrets restent dans Render.
 
+LANCEMENT LOCAL SOUS WINDOWS
+- Ouvrir PowerShell dans le dossier du dépôt et lancer `powershell -ExecutionPolicy Bypass -File .\run-local.ps1`.
+- Le script crée l'environnement Python, installe les dépendances, génère un jeton local et
+  demande la clé Gemini dans une invite masquée. La configuration est enregistrée dans `.env`.
+- `.env` est ignoré par Git ; ne le partage pas et ne le commite pas.
+- Ouvrir `http://127.0.0.1:8000/docs`, cliquer sur Authorize, saisir le jeton `APP_ACCESS_TOKEN`
+  enregistré dans `.env`, puis tester `POST /v1/assistant` avec `{"prompt":"Bonjour"}`.
+- Le contrôle local est disponible sur `http://127.0.0.1:8000/health`.
+- Arrêter le serveur avec Ctrl+C. Pour le relancer, exécuter la même commande ; la clé n'est
+  demandée que si elle manque dans `.env`.
+
 TESTS
 Installer les dépendances de développement avec `pip install -r requirements-dev.txt`,
 puis lancer `pytest`. Les tests simulent les fournisseurs et ne nécessitent aucune clé réelle.

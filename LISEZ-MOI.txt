@@ -12,13 +12,16 @@ Actions pour compiler un APK. L'API peut être appelée depuis ces clients lorsq
 ajoutés ; aucun client n'est fourni ici.
 
 CONFIGURATION
-Définir ces variables dans l'environnement du service :
-- OPENAI_API_KEY : clé API OpenAI, conservée uniquement côté serveur.
 - APP_ACCESS_TOKEN : jeton Bearer long et aléatoire, à configurer dans le client.
-- OPENAI_MODEL : modèle compatible avec Responses API ; valeur par défaut gpt-6.1-terra.
+- AI_PROVIDER : `auto` (défaut, Gemini si GEMINI_API_KEY existe, sinon OpenAI), `gemini` ou `openai`.
+- GEMINI_API_KEY : clé Google AI Studio, conservée uniquement côté serveur. Gemini 2.5 Flash
+  est le modèle par défaut et son niveau gratuit accepte texte et images selon les quotas.
+- GEMINI_MODEL : modèle Gemini, valeur par défaut `gemini-2.5-flash`.
+- OPENAI_API_KEY : clé API OpenAI, conservée uniquement côté serveur si OpenAI est utilisé.
+- OPENAI_MODEL : modèle OpenAI Responses, valeur par défaut `gpt-6.1-terra`.
 
 Ne commitez jamais de clés ou jetons. Le endpoint /health vérifie que le processus répond ;
-il ne vérifie pas l'accès aux identifiants OpenAI. Sans APP_ACCESS_TOKEN ou OPENAI_API_KEY,
+il ne vérifie pas les identifiants des fournisseurs. Sans la clé du fournisseur sélectionné,
 /v1/assistant renvoie une erreur de configuration.
 
 API
@@ -27,8 +30,12 @@ API
   {"prompt":"...", "image_data_url":"data:image/png;base64,..."} (image facultative).
 - Les images JPEG, PNG, WebP et GIF sont limitées à 5 Mo ; les octets sont vérifiés
   par signature avant leur envoi au fournisseur.
-- Les appels utilisent l'API OpenAI Responses avec store=false. La mémoire conversationnelle
-  n'est pas conservée côté serveur.
+- `AI_PROVIDER=auto` utilise Gemini dès que `GEMINI_API_KEY` est configurée ; sinon il utilise
+  OpenAI. `AI_PROVIDER` permet de forcer le fournisseur.
+- Gemini est appelé avec `generateContent` et OpenAI avec Responses (`store=false`). L'historique
+  conversationnel n'est pas conservé côté serveur.
+- Sur le niveau gratuit Gemini, Google indique que les requêtes peuvent être utilisées pour
+  améliorer ses produits. Évite d'y envoyer des images ou données sensibles.
 - Le limiteur de débit est en mémoire du processus : il convient à une instance unique et
   doit être remplacé par un stockage partagé si le service Render passe à plusieurs instances.
 
@@ -40,12 +47,12 @@ LIMITES DU SERVICE
   confirmés des hypothèses et des informations inconnues sur GTA 6.
 
 DEPLOIEMENT RENDER
-Le Blueprint utilise le Dockerfile et le contexte à la racine du dépôt. Connecter
-render.yaml au service Render, configurer les deux secrets ci-dessus et déployer depuis
-la branche choisie. Aucun déploiement réel ni appel OpenAI réel n'a été effectué pendant
-les vérifications locales.
+Le service Render existant utilise les fichiers de la racine. Pour activer Gemini, créer une
+clé dans Google AI Studio et ajouter `GEMINI_API_KEY` dans Environment dans Render. Le code
+sélectionnera Gemini automatiquement dès qu'il voit cette variable ; sinon il conserve OpenAI.
+Les quotas gratuits sont limités et peuvent changer. Les secrets restent dans Render.
 
 TESTS
 Installer les dépendances de développement avec `pip install -r requirements-dev.txt`,
-puis lancer `pytest`. Les tests simulent le fournisseur OpenAI et ne nécessitent pas de clé.
+puis lancer `pytest`. Les tests simulent les fournisseurs et ne nécessitent aucune clé réelle.
 

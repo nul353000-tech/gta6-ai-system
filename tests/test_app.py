@@ -174,6 +174,31 @@ def test_assistant_maps_provider_failure_to_gateway_error(client, monkeypatch):
     assert response.status_code == 502
 
 
+def test_assistant_explains_invalid_gemini_key_without_exposing_provider_body(client, monkeypatch):
+    class FakeResponse:
+        status_code = 400
+
+        @staticmethod
+        def json():
+            return {"error": {"message": "API key not valid. Please pass a valid API key."}}
+
+    async def fake_post(self, url, **kwargs):
+        return FakeResponse()
+
+    monkeypatch.setattr(api, "GEMINI_API_KEY", "private-test-key")
+    monkeypatch.setattr(api, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    response = client.post(
+        "/v1/assistant",
+        headers={"Authorization": "Bearer test-secret-token"},
+        json={"prompt": "Bonjour"},
+    )
+
+    assert response.status_code == 502
+    assert "GEMINI_API_KEY" in response.json()["detail"]
+    assert "private-test-key" not in response.text
+
+
 def test_assistant_explains_openai_quota_failure(client, monkeypatch):
     class FakeResponse:
         status_code = 429

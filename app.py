@@ -176,6 +176,44 @@ async def assistant(
             resp = await client.post(request_url, headers=request_headers, json=request_body)
         if resp.status_code >= 400:
             # Do not relay upstream response bodies; they may contain internal details.
+            if provider == "gemini" and resp.status_code in {400, 401, 403, 404}:
+                try:
+                    error = resp.json().get("error", {})
+                    error = error if isinstance(error, dict) else {}
+                    message = error.get("message", "")
+                    message = message.lower() if isinstance(message, str) else ""
+                    status = error.get("status", "")
+                    status = status.upper() if isinstance(status, str) else ""
+                except (ValueError, AttributeError):
+                    message = status = ""
+                if "api key not valid" in message or "api_key_invalid" in message:
+                    raise HTTPException(
+                        502,
+                        "Gemini rejette GEMINI_API_KEY. Vérifie la clé Google AI Studio dans Render.",
+                    )
+                if "generative language api" in message and any(
+                    phrase in message for phrase in ("not been used", "disabled", "not enabled")
+                ):
+                    raise HTTPException(
+                        502,
+                        "L'API Gemini n'est pas activée pour le projet de cette clé Google.",
+                    )
+                if "model" in message and any(
+                    phrase in message for phrase in ("not found", "not supported", "unknown")
+                ):
+                    raise HTTPException(
+                        502,
+                        f"Modèle Gemini indisponible ({GEMINI_MODEL}). Vérifie GEMINI_MODEL dans Render.",
+                    )
+                if status and len(status) <= 64 and status.replace("_", "").isalnum():
+                    raise HTTPException(
+                        502,
+                        f"Gemini a rejeté la requête ({resp.status_code}, {status}). Vérifie la clé et le modèle configurés dans Render.",
+                    )
+                raise HTTPException(
+                    502,
+                    f"Gemini a rejeté la requête ({resp.status_code}). Vérifie GEMINI_API_KEY et GEMINI_MODEL dans Render.",
+                )
             if resp.status_code == 429:
                 if provider == "gemini":
                     raise HTTPException(

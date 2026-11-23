@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101522"><title>GTA 6 AI SYSTEM V1.3</title>
+<style>
+:root{color-scheme:dark;--bg:#101522;--panel:#1b2434;--line:#344158;--muted:#aab6ca;--accent:#8496ff;--green:#8ee0b0;--amber:#ffd978}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#0e1320,#192337);font:15px system-ui;color:#f4f6fb;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:980px;margin:auto;padding:18px 14px 32px}.head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:clamp(23px,5vw,34px);margin:5px 0}h2{font-size:17px;margin:0 0 12px}h3{font-size:14px;margin:12px 0 7px}.muted{color:var(--muted);font-size:12px}
+.pill{border:1px solid #806d37;color:var(--amber);border-radius:22px;padding:6px 10px;font-size:11px}
+nav{display:flex;gap:7px;overflow:auto;margin:17px 0 12px;padding-bottom:4px}nav button{white-space:nowrap;background:#28344a}
+nav button.active{background:var(--accent);color:#101522}
+.panel{display:none}.panel.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:10px;margin:12px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px;margin:10px 0}
+.metric{background:#222e43;border-radius:12px;padding:13px;min-height:88px}.metric b{display:block;font-size:18px;margin:5px 0}
+.green{color:var(--green)}.amber{color:var(--amber)}
+button{background:#8496ff;color:#11182a;border:0;border-radius:10px;padding:10px 13px;font-weight:700;cursor:pointer}
+button.secondary{background:#344158;color:#f4f6fb}button.danger{background:#67404b;color:#fff}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+label{display:block;font-size:13px;color:#dbe2f0;margin:10px 0 5px}
+input[type=text],input[type=password],textarea,select{width:100%;background:#111a29;color:#fff;border:1px solid var(--line);border-radius:9px;padding:11px;font:inherit}
+textarea{min-height:90px;resize:vertical}input[type=file]{max-width:100%;margin:8px 0}
+.checkrow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}input[type=checkbox]{width:19px;height:19px;accent-color:var(--accent)}
+.note{background:#2b2934;border:1px solid #5b5265;border-radius:12px;padding:12px;line-height:1.45;font-size:13px}
+.result{white-space:pre-wrap;background:#111a29;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:55px;line-height:1.45}
+img.preview{max-width:100%;max-height:300px;object-fit:contain;border-radius:10px;display:none;margin-top:8px}
+ul.log{list-style:none;margin:0;padding:0}ul.log li{padding:8px 0;border-bottom:1px solid var(--line);font-size:13px}
+.small{font-size:11px;color:var(--muted)}#sessionClock{font-size:30px;letter-spacing:2px}.checkitem{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}.checkitem input{width:19px;height:19px}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:15px}
+@media(min-width:700px){.twocol{display:grid;grid-template-columns:1fr 1fr;gap:12px}}
+</style></head>
+<body><main>
+<div class="head"><div><div class="muted">CENTRE DE COMMANDE • ANDROID + WINDOWS 11</div><h1>🎮 GTA 6 AI SYSTEM</h1><div class="muted">V1.3 — tableau de bord local avec copilote Gemini optionnel</div></div><span class="pill" id="connection">MODE LOCAL</span></div>
+<div class="grid">
+ <div class="metric"><span class="muted">Plateforme</span><b class="green">PS5</b><span class="muted">Connexion Remote Play à valider</span></div>
+ <div class="metric"><span class="muted">Assistant</span><b class="green">Disponible</b><span class="muted">Règles locales + voix navigateur</span></div>
+ <div class="metric"><span class="muted">Copilote IA</span><b class="green">Gemini via API</b><span class="muted">Jeton requis dans Réglages</span></div>
+ <div class="metric"><span class="muted">Automatisation</span><b class="amber">Supervision</b><span class="muted">Aucune commande manette active</span></div>
+</div>
+<nav>
+<button class="active" data-tab="home">Accueil</button><button data-tab="assistant">Assistant</button><button data-tab="missions">Missions</button><button data-tab="session">Session</button><button data-tab="planner">Planificateur</button><button data-tab="vision">Vision</button><button data-tab="settings">Réglages</button>
+</nav>
+<section id="home" class="panel active">
+ <div class="twocol">
+  <div class="card"><h2>Centre de contrôle</h2>
+   <div class="checkrow">Assistant stratégique <input type="checkbox" id="mod_strategy" checked></div>
+   <div class="checkrow">Assistant vocal <input type="checkbox" id="mod_voice" checked></div>
+   <div class="checkrow">Analyse visuelle <input type="checkbox" id="mod_vision" checked></div>
+   <div class="checkrow">Automatisation (désactivée par sécurité) <input type="checkbox" id="mod_auto"></div>
+   <div class="actions"><button onclick="saveModules()">Enregistrer les modules</button></div>
+  </div>
+  <div class="card"><h2>État des connexions</h2>
+   <p>🖥️ Windows : <b id="pcstatus">Interface prête</b></p>
+   <p>📱 Android : <b>Interface compatible</b></p>
+   <p>🎮 PS5 / Remote Play : <b class="amber">Non connecté</b></p>
+   <p>☁️ Service IA : <b class="amber">Jeton à saisir dans Réglages</b></p>
+   <div class="small">Le tableau de bord ne prétend pas avoir accès au jeu tant qu'aucune source vidéo compatible n'est établie.</div>
+  </div>
+ </div>
+ <div class="card"><h2>Journal d'activité</h2><ul class="log" id="log"></ul><div class="actions"><button class="secondary" onclick="addLog('Test du système : interface opérationnelle.')">Tester le système</button><button class="secondary" onclick="clearLog()">Effacer</button></div></div>
+</section>
+<section id="assistant" class="panel">
+ <div class="card"><h2>Copilote stratégique</h2>
+  <label for="situation">Décris ta situation dans le jeu</label><textarea id="situation" placeholder="Ex. Je suis en poursuite, j'ai peu de santé et je dois rejoindre un objectif..."></textarea>
+  <div class="actions"><button onclick="makePlan()">Conseil local</button><button onclick="askAssistant()">Demander à Gemini</button><button class="secondary" onclick="startVoice()">🎙️ Dicter</button><button class="secondary" onclick="speakResult()">🔊 Lire la réponse</button></div>
+  <h3>Recommandation locale</h3><div class="result" id="plan">Décris une situation pour obtenir une première recommandation fondée sur des règles simples.</div>
+  <div class="small">Le conseil local fonctionne hors ligne. Gemini transmet le texte saisi au fournisseur IA via l’API protégée par ton serveur.</div>
+ </div>
+ <div class="card"><h2>Notes rapides</h2><textarea id="notes" placeholder="Conseils, codes, lieux à revisiter, idées..."></textarea><div class="actions"><button onclick="saveNotes()">Enregistrer les notes</button></div></div>
+</section>
+<section id="missions" class="panel">
+ <div class="card"><h2>Gestionnaire d'objectifs</h2>
+  <label>Nouvel objectif</label><input type="text" id="goalInput" placeholder="Ex. Terminer la mission principale">
+  <div class="actions"><button onclick="addGoal()">Ajouter l'objectif</button></div>
+  <h3>Liste de progression</h3><ul class="log" id="goals"></ul>
+ </div>
+ <div class="card"><h2>Suivi personnel (saisie manuelle)</h2>
+  <div class="twocol"><div><label>Argent en jeu</label><input type="text" id="money" placeholder="Non renseigné"></div><div><label>Mission / activité actuelle</label><input type="text" id="activity" placeholder="Non renseigné"></div></div>
+  <div class="actions"><button onclick="saveProgress()">Enregistrer la progression</button></div>
+ </div>
+</section>
+<section id="vision" class="panel">
+ <div class="card"><h2>Analyse visuelle</h2>
+  <p class="muted">Ajoute une capture pour l’afficher localement ou demander une analyse Gemini. La capture est envoyée au fournisseur uniquement lorsque tu cliques sur le bouton d’analyse.</p>
+  <input type="file" id="imageFile" accept="image/*" onchange="previewImage(event)">
+  <img id="preview" class="preview" alt="Aperçu de la capture">
+  <div class="actions"><button onclick="analyzeImage()">Analyser la capture avec Gemini</button><button class="secondary" onclick="clearImage()">Retirer l'image</button></div>
+  <label>Ce que tu veux faire analyser</label><textarea id="imageQuestion" placeholder="Ex. Aide-moi à comprendre l'objectif visible sur cette capture."></textarea>
+  <div class="result" id="imageResult">Choisis une capture et demande son analyse si tu le souhaites.</div>
+  <div class="note">Limite : le tableau de bord analyse uniquement l’image que tu sélectionnes. Il ne capture pas PS Remote Play et ne commande pas la PS5.</div>
+ </div>
+</section>
+<section id="settings" class="panel">
+ <div class="card"><h2>Accès protégé au serveur</h2>
+  <p class="muted">Saisis le jeton APP_ACCESS_TOKEN de ton fichier local .env. Il reste en mémoire de cet onglet et doit être saisi séparément sur chaque appareil.</p>
+  <label for="accessToken">Jeton d’accès</label><input id="accessToken" type="password" autocomplete="off" placeholder="APP_ACCESS_TOKEN">
+  <div class="actions"><button onclick="saveAccessToken()">Utiliser le jeton dans cet onglet</button><button class="secondary" onclick="clearAccessToken()">Effacer le jeton</button></div>
+ </div>
+ <div class="card"><h2>Synchronisation Android / PC</h2>
+  <p class="muted">Sur le même Wi-Fi privé, ouvre l’adresse LAN affichée par le script Windows et saisis le même jeton. La synchronisation est protégée par Bearer token.</p>
+  <p id="syncState">Vérification du serveur…</p>
+  <div class="actions"><button class="secondary" onclick="syncNow()">Synchroniser maintenant</button><button class="secondary" onclick="exportData()">Exporter les données</button><label style="margin:0"><input type="file" id="importFile" accept="application/json" onchange="importData(event)"> Importer une sauvegarde JSON</label></div>
+ </div>
+ <div class="card"><h2>Configuration technique</h2>
+  <p>PS Remote Play : utiliser l'application officielle Sony sur l'appareil compatible. Ce prototype ne capture pas son flux et ne détourne pas son interface.</p>
+  <p>Contrôle manette : aucune commande automatisée n'est activée. Les actions sensibles restent manuelles.</p>
+  <p>Gemini : texte et captures envoyés uniquement après action explicite et avec le jeton configuré. L’API refuse les requêtes sans authentification.</p>
+  <p>Réseau : le serveur écoute sur le PC uniquement par défaut. Active le mode LAN seulement sur un Wi-Fi privé de confiance.</p>
+ </div>
+</section>
+<section id="session" class="panel">
+ <div class="card"><h2>⏱️ Suivi de session</h2>
+  <div class="metric"><span class="muted">Temps de jeu suivi par le tableau de bord</span><b id="sessionClock">00:00:00</b><span class="small">Le chronomètre fonctionne tant que cette page reste ouverte.</span></div>
+  <div class="actions"><button onclick="startSession()">Démarrer / reprendre</button><button class="secondary" onclick="pauseSession()">Pause</button><button class="danger" onclick="finishSession()">Terminer la session</button></div>
+  <p id="sessionInfo" class="small">Aucune session active.</p>
+ </div>
+ <div class="card"><h2>📋 Checklist avant mission</h2>
+  <div id="checklist"></div>
+  <div class="actions"><button class="secondary" onclick="resetChecklist()">Réinitialiser la checklist</button></div>
+ </div>
+ <div class="card"><h2>📊 Statistiques personnelles</h2>
+  <div class="twocol"><div><label>Missions terminées</label><input id="statMissions" type="number" min="0" step="1"></div><div><label>Échecs / recommencements</label><input id="statFails" type="number" min="0" step="1"></div></div>
+  <label>Résumé de la session</label><textarea id="sessionSummary" placeholder="Ce qui a bien fonctionné, à améliorer..."></textarea>
+  <div class="actions"><button onclick="saveSessionStats()">Enregistrer les statistiques</button></div>
+ </div>
+</section>
+<section id="planner" class="panel">
+ <div class="card"><h2>🧭 Planificateur d'itinéraire et d'objectifs</h2>
+  <label>Point de départ / situation</label><input id="routeStart" type="text" placeholder="Ex. Position actuelle">
+  <label>Destination / objectif</label><input id="routeEnd" type="text" placeholder="Ex. Marqueur de mission">
+  <label>Contraintes et préparation</label><textarea id="routeNotes" placeholder="Véhicule, équipement, niveau de recherche, précautions..."></textarea>
+  <div class="actions"><button onclick="saveRoute()">Enregistrer le plan</button><button class="secondary" onclick="buildRouteAdvice()">Générer une checklist</button></div>
+  <div class="result" id="routeAdvice">Renseigne un départ et une destination pour préparer ton trajet.</div>
+ </div>
+ <div class="card"><h2>🧰 Équipement et ressources</h2>
+  <label>Véhicule / transport</label><input id="vehicle" type="text" placeholder="Véhicule utilisé">
+  <label>Équipement / ressources disponibles</label><textarea id="loadout" placeholder="Armes, protections, objets, argent disponible..."></textarea>
+  <div class="actions"><button onclick="saveLoadout()">Enregistrer l'équipement</button></div>
+ </div>
+ <div class="card"><h2>📓 Journal de session</h2>
+  <textarea id="journalEntry" placeholder="Note un événement, un lieu, une astuce ou un résultat..."></textarea>
+  <div class="actions"><button onclick="addJournal()">Ajouter au journal</button></div>
+  <ul class="log" id="journalList"></ul>
+ </div>
+</section>
+<footer>GTA 6 AI SYSTEM V1.3 • Prototype de supervision • Pas affilié à Rockstar ou Sony</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let data={modules:{strategy:true,voice:true,vision:true,auto:false},log:[],goals:[],notes:'',money:'',activity:'',sessionSeconds:0,sessionStarted:null,sessionStats:{missions:0,fails:0,summary:''},checklist:[false,false,false,false,false],route:{start:'',end:'',notes:''},loadout:{vehicle:'',items:''},journal:[]};
+let sessionTicker=null;
+const checklistLabels=['Vérifier l’objectif actif','Vérifier santé et protections','Vérifier véhicule / moyen de transport','Vérifier équipement et ressources','Prévoir une sortie ou un plan de repli'];
+let lastPlan='';
+let imageDataUrl='';
+function accessToken(){try{return sessionStorage.getItem('gta6_access_token')||''}catch(e){return ''}}
+function localSave(){try{localStorage.setItem('gta6_v13',JSON.stringify(data))}catch(e){}}
+function localLoad(){try{const x=JSON.parse(localStorage.getItem('gta6_v13')||localStorage.getItem('gta6_v12'));if(x&&typeof x==='object')data={...data,...x}}catch(e){}}
+function saveAccessToken(){const token=$('accessToken').value.trim();if(!token){$('syncState').textContent='Saisis le jeton APP_ACCESS_TOKEN.';return}try{sessionStorage.setItem('gta6_access_token',token);$('accessToken').value='';load()}catch(e){$('syncState').textContent='Le navigateur ne permet pas de conserver le jeton dans cet onglet.'}}
+function clearAccessToken(){try{sessionStorage.removeItem('gta6_access_token')}catch(e){}$('accessToken').value='';$('syncState').textContent='Jeton effacé de cet onglet.'}
+async function apiJson(path,options={}){const token=accessToken();if(!token)throw new Error('Saisis APP_ACCESS_TOKEN dans Réglages.');const headers={...(options.headers||{}),Authorization:`Bearer ${token}`};if(options.body)headers['Content-Type']='application/json';const response=await fetch(path,{...options,headers});let result={};try{result=await response.json()}catch(e){}if(!response.ok)throw new Error(result.detail||`Erreur API (${response.status}).`);return result}
+async function load(){
+ localLoad();
+ if(location.protocol!=='file:'){if(accessToken()){try{const remote=await apiJson('/api/state');if(remote.initialized){data={...data,...remote.state};localSave()}else{await apiJson('/api/state',{method:'POST',body:JSON.stringify(data)})}$('connection').textContent='SERVEUR PROTÉGÉ';$('syncState').textContent='Synchronisation serveur protégée active.'}catch(e){$('syncState').textContent=e.message}}else{$('syncState').textContent='Mode local actif. Saisis le jeton pour activer la synchronisation et Gemini.'}}
+ $('mod_strategy').checked=data.modules.strategy;$('mod_voice').checked=data.modules.voice;$('mod_vision').checked=data.modules.vision;$('mod_auto').checked=data.modules.auto;
+ $('notes').value=data.notes||'';$('money').value=data.money||'';$('activity').value=data.activity||'';
+ $('statMissions').value=data.sessionStats?.missions||0;$('statFails').value=data.sessionStats?.fails||0;$('sessionSummary').value=data.sessionStats?.summary||'';
+ $('routeStart').value=data.route?.start||'';$('routeEnd').value=data.route?.end||'';$('routeNotes').value=data.route?.notes||'';
+ $('vehicle').value=data.loadout?.vehicle||'';$('loadout').value=data.loadout?.items||'';renderExtras();updateSessionClock();if(data.sessionStarted)startSessionTicker();
+ render();
+}
+async function persist(){localSave();if(location.protocol!=='file:'&&accessToken()){try{await apiJson('/api/state',{method:'POST',body:JSON.stringify(data)});$('syncState').textContent='Sauvegarde synchronisée.'}catch(e){$('syncState').textContent=e.message}}}
+function render(){ $('log').innerHTML=(data.log||[]).map(x=>'<li><span class="small">'+esc(x.t)+'</span> — '+esc(x.m)+'</li>').join('')||'<li class="muted">Aucune activité.</li>';
+ $('goals').innerHTML=(data.goals||[]).map((g,i)=>'<li><label style="display:flex;gap:9px;align-items:center"><input type="checkbox" '+(g.done?'checked':'')+' onchange="toggleGoal('+i+',this.checked)"><span style="'+(g.done?'text-decoration:line-through;color:#aab6ca':'')+'">'+esc(g.text)+'</span><button class="danger" style="margin-left:auto;padding:5px 8px" onclick="removeGoal('+i+')">×</button></label></li>').join('')||'<li class="muted">Aucun objectif.</li>'; }
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function addLog(m){data.log.unshift({t:new Date().toLocaleString('fr-FR'),m});data.log=data.log.slice(0,40);await persist();render()}
+function clearLog(){data.log=[];persist();render()}
+function saveModules(){data.modules={strategy:$('mod_strategy').checked,voice:$('mod_voice').checked,vision:$('mod_vision').checked,auto:$('mod_auto').checked};persist();addLog('Préférences des modules enregistrées.')}
+function addGoal(){let v=$('goalInput').value.trim();if(!v)return;data.goals.push({text:v,done:false});$('goalInput').value='';persist();render();addLog('Objectif ajouté : '+v)}
+function toggleGoal(i,v){data.goals[i].done=v;persist();render();addLog((v?'Objectif terminé : ':'Objectif réouvert : ')+data.goals[i].text)}
+function removeGoal(i){data.goals.splice(i,1);persist();render()}
+function saveNotes(){data.notes=$('notes').value;persist();addLog('Notes enregistrées.')}
+function saveProgress(){data.money=$('money').value;data.activity=$('activity').value;persist();addLog('Progression personnelle enregistrée.')}
+function makePlan(){
+ const s=$('situation').value.trim();if(!s){$('plan').textContent='Décris d’abord la situation.';return}
+ const t=s.toLowerCase();let a=['1. Mets-toi à couvert et observe les menaces.','2. Repère ton objectif et une voie de sortie.','3. Évite les dépenses ou actions irréversibles tant que la situation n’est pas claire.','4. Vérifie le résultat avant de poursuivre.'];
+ if(/poursuite|police|flic|étoile|recherche/.test(t))a=['1. Priorise la sécurité et évite les collisions inutiles.','2. Cherche un itinéraire dégagé et des possibilités de rupture de ligne de vue.','3. Évite les zones dangereuses si ton véhicule est endommagé.','4. Vérifie que le niveau de recherche baisse avant de reprendre l’objectif.'];
+ if(/santé|vie|blessé|mourir|mort/.test(t))a=['1. Éloigne-toi immédiatement de la menace.','2. Cherche un abri sûr et récupère de la santé si le jeu le permet.','3. Réévalue l’équipement et la difficulté avant de reprendre.'];
+ if(/argent|acheter|dépense|invest/.test(t))a=['1. Vérifie le prix et l’utilité réelle de l’achat.','2. Garde une réserve pour les besoins de mission.','3. Compare les alternatives avant toute dépense importante.'];
+ if(/mission|objectif|aller|gps|destination/.test(t))a=['1. Confirme l’objectif exact affiché.','2. Consulte la carte et choisis un itinéraire sûr.','3. Prépare le véhicule et l’équipement nécessaires.','4. Vérifie les conditions de réussite après l’étape.'];
+ lastPlan='Analyse locale (conseils généraux)\\n'+a.join('\\n')+'\\n\\nSituation : '+s;$('plan').textContent=lastPlan;addLog('Une recommandation stratégique locale a été générée.');
+}
+async function askAssistant(){const prompt=$('situation').value.trim();if(!prompt){$('plan').textContent='Décris d’abord la situation.';return}$('plan').textContent='Gemini prépare une réponse…';try{lastPlan=await requestAssistant(prompt);$('plan').textContent=lastPlan;addLog('Réponse Gemini reçue.')}catch(e){$('plan').textContent='Gemini indisponible : '+e.message;addLog('Échec de la requête Gemini.')}}
+async function requestAssistant(prompt,image=null){if(location.protocol==='file:')throw new Error('Ouvre le tableau de bord depuis le serveur local pour utiliser Gemini.');const payload={prompt};if(image)payload.image_data_url=image;const result=await apiJson('/v1/assistant',{method:'POST',body:JSON.stringify(payload)});return result.answer}
+async function analyzeImage(){if(!imageDataUrl){$('imageResult').textContent='Choisis d’abord une capture.';return}const prompt=$('imageQuestion').value.trim()||'Décris cette capture et aide-moi à comprendre ce qui est visible. Signale les incertitudes.';$('imageResult').textContent='Analyse de la capture en cours…';try{$('imageResult').textContent=await requestAssistant(prompt,imageDataUrl);addLog('Analyse Gemini de la capture terminée.')}catch(e){$('imageResult').textContent='Analyse indisponible : '+e.message}}
+function speakResult(){const text=lastPlan||$('plan').textContent;if(!('speechSynthesis'in window)){alert('Synthèse vocale non prise en charge par ce navigateur.');return}speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(text))}
+function startVoice(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){alert('Reconnaissance vocale non prise en charge ici. Utilise la dictée du clavier Android.');return}const r=new SR();r.lang='fr-FR';r.onresult=e=>$('situation').value=e.results[0][0].transcript;r.onerror=()=>alert('La dictée vocale n’a pas pu démarrer.');r.start()}
+function previewImage(e){const f=e.target.files[0];if(!f)return;if(!f.type.startsWith('image/')){alert('Choisis un fichier image valide.');e.target.value='';return}if(f.size>5*1024*1024){alert('Image trop volumineuse (maximum 5 Mo).');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{imageDataUrl=String(reader.result||'');$('preview').src=imageDataUrl;$('preview').style.display='block';addLog('Capture chargée pour aperçu local : '+f.name)};reader.onerror=()=>alert('Impossible de lire cette image.');reader.readAsDataURL(f)}
+function clearImage(){imageDataUrl='';$('preview').removeAttribute('src');$('preview').style.display='none';$('imageFile').value='';$('imageResult').textContent='Choisis une capture et demande son analyse si tu le souhaites.'}
+async function syncNow(){if(!accessToken()){$('syncState').textContent='Saisis APP_ACCESS_TOKEN avant de synchroniser.';return}try{await apiJson('/api/state',{method:'POST',body:JSON.stringify(data)});$('syncState').textContent='Synchronisation terminée.';addLog('Synchronisation manuelle terminée.')}catch(e){$('syncState').textContent=e.message}}
+function exportData(){const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='gta6-ai-backup.json';a.click();URL.revokeObjectURL(a.href)}
+function importData(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=async()=>{try{const x=JSON.parse(r.result);data={...data,...x};await persist();render();addLog('Sauvegarde importée.')}catch(err){alert('Fichier JSON invalide.')}};r.readAsText(f)}
+
+function fmtTime(s){s=Math.max(0,Math.floor(s||0));return [Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(x=>String(x).padStart(2,'0')).join(':')}
+function currentSession(){return (data.sessionSeconds||0)+(data.sessionStarted?Math.floor((Date.now()-data.sessionStarted)/1000):0)}
+function updateSessionClock(){$('sessionClock').textContent=fmtTime(currentSession());$('sessionInfo').textContent=data.sessionStarted?'Session en cours — sauvegarde automatique.':'Temps cumulé : '+fmtTime(data.sessionSeconds||0)}
+function startSession(){if(!data.sessionStarted){data.sessionStarted=Date.now();persist();startSessionTicker();addLog('Session démarrée.')} }
+function startSessionTicker(){if(sessionTicker)clearInterval(sessionTicker);sessionTicker=setInterval(updateSessionClock,1000)}
+function pauseSession(){if(data.sessionStarted){data.sessionSeconds=currentSession();data.sessionStarted=null;persist();updateSessionClock();addLog('Session mise en pause.')}}
+function finishSession(){pauseSession();if(data.sessionSeconds>0){data.journal=data.journal||[];data.journal.unshift({t:new Date().toLocaleString('fr-FR'),text:'Session terminée — durée cumulée : '+fmtTime(data.sessionSeconds)});data.sessionSeconds=0;persist();renderExtras();updateSessionClock();addLog('Session terminée.')} }
+function renderExtras(){
+ $('checklist').innerHTML=checklistLabels.map((x,i)=>'<div class="checkitem"><input type="checkbox" '+(data.checklist?.[i]?'checked':'')+' onchange="setCheck('+i+',this.checked)"><span>'+esc(x)+'</span></div>').join('');
+ $('journalList').innerHTML=(data.journal||[]).map(x=>'<li><span class="small">'+esc(x.t)+'</span> — '+esc(x.text)+'</li>').join('')||'<li class="muted">Aucune note dans le journal.</li>';
+}
+function setCheck(i,v){data.checklist=data.checklist||[];data.checklist[i]=v;persist()}
+function resetChecklist(){data.checklist=[false,false,false,false,false];persist();renderExtras()}
+function saveSessionStats(){data.sessionStats={missions:Math.max(0,Number($('statMissions').value)||0),fails:Math.max(0,Number($('statFails').value)||0),summary:$('sessionSummary').value};persist();addLog('Statistiques de session enregistrées.')}
+function saveRoute(){data.route={start:$('routeStart').value,end:$('routeEnd').value,notes:$('routeNotes').value};persist();addLog('Plan de trajet enregistré.')}
+function buildRouteAdvice(){saveRoute();let r=data.route;if(!r.end.trim()){$('routeAdvice').textContent='Indique une destination ou un objectif.';return}$('routeAdvice').textContent='Préparation suggérée\\n1. Confirme le marqueur et les conditions de mission.\\n2. Vérifie le véhicule et l’équipement.\\n3. Choisis un trajet sûr dans la carte du jeu.\\n4. Garde une solution de repli.\\n5. Vérifie l’objectif à l’arrivée.\\n\\nDépart : '+(r.start||'Non précisé')+'\\nDestination : '+r.end+'\\nContraintes : '+(r.notes||'Aucune') }
+function saveLoadout(){data.loadout={vehicle:$('vehicle').value,items:$('loadout').value};persist();addLog('Équipement enregistré.')}
+function addJournal(){let v=$('journalEntry').value.trim();if(!v)return;data.journal=data.journal||[];data.journal.unshift({t:new Date().toLocaleString('fr-FR'),text:v});data.journal=data.journal.slice(0,100);$('journalEntry').value='';persist();renderExtras();addLog('Entrée ajoutée au journal.')}
+
+document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')}));
+load();
+</script></body></html>

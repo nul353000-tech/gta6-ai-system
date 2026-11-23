@@ -3,11 +3,17 @@ import time
 import base64
 import binascii
 import hmac
+import json
+import tempfile
+import threading
+from copy import deepcopy
+from pathlib import Path
 from collections import defaultdict, deque
 from typing import Optional
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Security
+from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, ConfigDict
@@ -18,13 +24,26 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
 AI_PROVIDER = os.getenv("AI_PROVIDER", "auto").strip().lower()
 APP_ACCESS_TOKEN = os.getenv("APP_ACCESS_TOKEN", "").strip()
+BASE_DIR = Path(__file__).resolve().parent
+STATE_FILE = Path(os.getenv("APP_STATE_FILE", str(BASE_DIR / ".local-state.json")))
+MAX_STATE_BYTES = 2 * 1024 * 1024
+STATE_LOCK = threading.Lock()
+DEFAULT_STATE = {
+    "modules": {"strategy": True, "voice": True, "vision": True, "auto": False},
+    "log": [], "goals": [], "notes": "", "money": "", "activity": "",
+    "sessionSeconds": 0, "sessionStarted": None,
+    "sessionStats": {"missions": 0, "fails": 0, "summary": ""},
+    "checklist": [False, False, False, False, False],
+    "route": {"start": "", "end": "", "notes": ""},
+    "loadout": {"vehicle": "", "items": ""}, "journal": [],
+}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 WINDOW_SECONDS = 60
 MAX_REQUESTS_PER_WINDOW = 12
 MAX_RATE_LIMIT_CLIENTS = 10_000
 hits = defaultdict(deque)
 
-app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.2.0")
+app = FastAPI(title="GTA 6 AI SYSTEM API", version="1.3.0")
 bearer_scheme = HTTPBearer(auto_error=False, scheme_name="BearerAuth")
 # Android WebView can send requests with an opaque/null origin. No cookies are used;
 # the private bearer token is mandatory on the protected endpoint.
@@ -36,6 +55,68 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+def _require_access(authorization: Optional[HTTPAuthorizationCredentials]) -> None:
+    if not APP_ACCESS_TOKEN:
+        raise HTTPException(503, "Backend non configuré : APP_ACCESS_TOKEN manquant.")
+    if (
+        not authorization
+        or authorization.scheme.lower() != "bearer"
+        or not hmac.compare_digest(authorization.credentials, APP_ACCESS_TOKEN)
+    ):
+        raise HTTPException(401, "Accès refusé.")
+
+
+def _read_state() -> dict:
+    try:
+        if STATE_FILE.stat().st_size > MAX_STATE_BYTES:
+            return deepcopy(DEFAULT_STATE)
+        state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        return state if isinstance(state, dict) else deepcopy(DEFAULT_STATE)
+    except (OSError, ValueError):
+        return deepcopy(DEFAULT_STATE)
+
+
+def _write_state(state: dict) -> None:
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix="gta6-state-", suffix=".tmp", dir=STATE_FILE.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(state, output, ensure_ascii=False, separators=(",", ":"))
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp_name, STATE_FILE)
+    finally:
+        try:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+        except OSError:
+            pass
+
+
+async def _read_limited_json(request: Request) -> dict:
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" not in content_type:
+        raise HTTPException(415, "Le type application/json est requis.")
+    try:
+        content_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Longueur de requête invalide.")
+    if content_length > MAX_STATE_BYTES:
+        raise HTTPException(413, "Sauvegarde trop volumineuse (maximum 2 Mo).")
+    raw = bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw) > MAX_STATE_BYTES:
+            raise HTTPException(413, "Sauvegarde trop volumineuse (maximum 2 Mo).")
+    try:
+        state = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise HTTPException(400, "JSON invalide.")
+    if not isinstance(state, dict):
+        raise HTTPException(400, "La sauvegarde doit être un objet JSON.")
+    return state
+
 class AssistantRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     prompt: str = Field(min_length=1, max_length=8000)
@@ -44,6 +125,43 @@ class AssistantRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "gta6-ai-system", "version": app.version}
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/GTA6_AI_SYSTEM.html", include_in_schema=False)
+def dashboard():
+    path = BASE_DIR / "web" / "GTA6_AI_SYSTEM.html"
+    if not path.is_file():
+        raise HTTPException(404, "Tableau de bord indisponible.")
+    return FileResponse(
+        path,
+        media_type="text/html",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@app.get("/api/state", include_in_schema=False)
+def get_state(
+    authorization: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+):
+    _require_access(authorization)
+    with STATE_LOCK:
+        return {"state": _read_state(), "initialized": STATE_FILE.is_file()}
+
+
+@app.post("/api/state", include_in_schema=False)
+async def save_state(
+    request: Request,
+    authorization: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
+):
+    _require_access(authorization)
+    state = await _read_limited_json(request)
+    with STATE_LOCK:
+        try:
+            _write_state(state)
+        except OSError:
+            raise HTTPException(500, "Impossible d'enregistrer la sauvegarde locale.")
+    return {"saved": True}
 
 
 def _image_mime(data: bytes) -> Optional[str]:
@@ -83,14 +201,7 @@ async def assistant(
     request: Request,
     authorization: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
 ):
-    if not APP_ACCESS_TOKEN:
-        raise HTTPException(503, "Backend non configuré : APP_ACCESS_TOKEN manquant.")
-    if (
-        not authorization
-        or authorization.scheme.lower() != "bearer"
-        or not hmac.compare_digest(authorization.credentials, APP_ACCESS_TOKEN)
-    ):
-        raise HTTPException(401, "Accès refusé.")
+    _require_access(authorization)
     provider = AI_PROVIDER
     if provider == "auto":
         if GEMINI_API_KEY:

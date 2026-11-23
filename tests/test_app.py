@@ -34,6 +34,64 @@ def test_health_reports_running_version(client):
     }
 
 
+def test_dashboard_serves_v13_html(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "GTA 6 AI SYSTEM V1.3" in response.text
+    assert "askAssistant()" in response.text
+
+
+def test_docker_image_includes_the_dashboard():
+    with open("Dockerfile", encoding="utf-8") as dockerfile:
+        assert "COPY web/ ./web/" in dockerfile.read()
+
+
+def test_state_api_requires_bearer_token(client):
+    assert client.get("/api/state").status_code == 401
+    assert client.post("/api/state", json={"notes": "test"}).status_code == 401
+
+
+def test_state_api_saves_and_loads_json(client, monkeypatch, tmp_path):
+    state_file = tmp_path / "state.json"
+    monkeypatch.setattr(api, "STATE_FILE", state_file)
+    headers = {"Authorization": "Bearer test-secret-token"}
+    state = {"notes": "Local save", "journal": [{"text": "test"}]}
+
+    saved = client.post("/api/state", headers=headers, json=state)
+    loaded = client.get("/api/state", headers=headers)
+
+    assert saved.status_code == 200
+    assert saved.json() == {"saved": True}
+    assert loaded.status_code == 200
+    assert loaded.json() == {"state": state, "initialized": True}
+    assert state_file.exists()
+
+
+def test_empty_state_reports_not_initialized(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "STATE_FILE", tmp_path / "missing-state.json")
+    response = client.get("/api/state", headers={"Authorization": "Bearer test-secret-token"})
+    assert response.status_code == 200
+    assert response.json()["initialized"] is False
+
+
+def test_state_api_rejects_invalid_or_oversized_json(client):
+    headers = {"Authorization": "Bearer test-secret-token"}
+    invalid_type = client.post("/api/state", headers=headers, content="{}")
+    invalid_json = client.post(
+        "/api/state", headers={**headers, "Content-Type": "application/json"}, content="not-json"
+    )
+    oversized = client.post(
+        "/api/state",
+        headers={**headers, "Content-Type": "application/json"},
+        content=b"{" + b" " * api.MAX_STATE_BYTES + b"}",
+    )
+
+    assert invalid_type.status_code == 415
+    assert invalid_json.status_code == 400
+    assert oversized.status_code == 413
+
+
 def test_openapi_documents_bearer_authentication(client):
     schema = client.get("/openapi.json").json()
     assert schema["components"]["securitySchemes"]["BearerAuth"] == {
@@ -262,4 +320,5 @@ def test_assistant_enforces_rate_limit(client, monkeypatch):
     second = client.post("/v1/assistant", headers={"Authorization": "Bearer test-secret-token"}, json={"prompt": "2"})
     assert first.status_code == 200
     assert second.status_code == 429
+
 

@@ -2,14 +2,15 @@ GTA 6 AI SYSTEM — API
 ====================
 
 CONTENU DU DEPOT
-- app.py : API FastAPI avec authentification Bearer, analyse de texte et d'images.
+- app.py : API FastAPI, tableau de bord, synchronisation protégée et analyse IA texte/image.
+- web/GTA6_AI_SYSTEM.html : tableau de bord web responsive V1.3 avec sessions, objectifs,
+  checklist, planificateur, journal, voix navigateur, export/import et aperçu de capture.
+- run-local.ps1 : installation et lancement local Windows, avec option LAN explicite.
 - Dockerfile, requirements.txt et render.yaml : configuration de l'API et du déploiement.
 - tests/ : tests automatisés sans appel réseau au fournisseur IA.
 
-Les sources de l'application Android et de l'interface web annoncées dans d'anciennes
-instructions ne sont pas présentes dans ce dépôt. Il n'y a pas non plus de workflow GitHub
-Actions pour compiler un APK. L'API peut être appelée depuis ces clients lorsqu'ils seront
-ajoutés ; aucun client n'est fourni ici.
+Le tableau de bord web fonctionne dans un navigateur Android ou PC. Aucun APK Android natif
+n'est fourni et le logiciel ne contrôle pas le jeu ou la manette.
 
 CONFIGURATION
 - APP_ACCESS_TOKEN : jeton Bearer long et aléatoire, à configurer dans le client.
@@ -25,7 +26,9 @@ il ne vérifie pas les identifiants des fournisseurs. Sans la clé du fournisseu
 /v1/assistant renvoie une erreur de configuration.
 
 API
+- GET / : tableau de bord web.
 - GET /health : contrôle de disponibilité.
+- GET/POST /api/state : synchronisation JSON avec authentification Bearer ; maximum 2 Mo.
 - POST /v1/assistant : en-tête Authorization: Bearer <APP_ACCESS_TOKEN> et JSON
   {"prompt":"...", "image_data_url":"data:image/png;base64,..."} (image facultative).
 - Les images JPEG, PNG, WebP et GIF sont limitées à 5 Mo ; les octets sont vérifiés
@@ -38,6 +41,8 @@ API
   améliorer ses produits. Évite d'y envoyer des images ou données sensibles.
 - Le limiteur de débit est en mémoire du processus : il convient à une instance unique et
   doit être remplacé par un stockage partagé si le service Render passe à plusieurs instances.
+- Les sauvegardes serveur locales sont écrites dans `.local-state.json` (ignoré par Git).
+  Le disque Render est éphémère ; exporte tes données si tu utilises le tableau de bord en ligne.
 
 LIMITES DU SERVICE
 - L'API ne reçoit pas le flux PS Remote Play et n'envoie aucune commande à la PS5.
@@ -53,12 +58,19 @@ sélectionnera Gemini automatiquement dès qu'il voit cette variable ; sinon il 
 Les quotas gratuits sont limités et peuvent changer. Les secrets restent dans Render.
 
 LANCEMENT LOCAL SOUS WINDOWS
-- Ouvrir PowerShell dans le dossier du dépôt et lancer `powershell -ExecutionPolicy Bypass -File .\run-local.ps1`.
+- Ouvrir PowerShell dans le dossier du dépôt et lancer
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run-local.ps1`.
 - Le script crée l'environnement Python, installe les dépendances, génère un jeton local et
   demande la clé Gemini dans une invite masquée. La configuration est enregistrée dans `.env`.
 - `.env` est ignoré par Git ; ne le partage pas et ne le commite pas.
-- Ouvrir `http://127.0.0.1:8000/docs`, cliquer sur Authorize, saisir le jeton `APP_ACCESS_TOKEN`
-  enregistré dans `.env`, puis tester `POST /v1/assistant` avec `{"prompt":"Bonjour"}`.
+- Ouvrir `http://127.0.0.1:8000`, puis dans Réglages saisir le `APP_ACCESS_TOKEN` enregistré
+  localement dans `.env`. Le jeton reste dans la mémoire de l'onglet.
+- Pour afficher seulement ce jeton dans une autre fenêtre PowerShell, exécuter
+  `(Get-Content .env | Where-Object { $_ -like 'APP_ACCESS_TOKEN=*' }) -replace '^APP_ACCESS_TOKEN=',''`.
+  Ne partage pas le résultat.
+- Pour synchroniser un téléphone sur le même Wi-Fi privé, lancer avec `-Lan` et saisir le même
+  jeton sur Android. Le mode LAN écoute sur le réseau local : ne l'utilise pas sur un Wi-Fi public
+  et n'expose pas le port 8000 sur Internet.
 - Le contrôle local est disponible sur `http://127.0.0.1:8000/health`.
 - Arrêter le serveur avec Ctrl+C. Pour le relancer, exécuter la même commande ; la clé n'est
   demandée que si elle manque dans `.env`.
